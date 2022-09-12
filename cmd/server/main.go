@@ -1,21 +1,35 @@
 package main
 
 import (
-	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jessevdk/go-flags"
 	"github.com/nitwhiz/no-load/internal/cold"
 	"os"
 	"path"
 )
 
+type CLIOptions struct {
+	IgnoreHeader []string `short:"i" long:"ignore-header" description:"header name to ignore when hashing"`
+}
+
 func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("not enough arguments.")
+	cliOpts := CLIOptions{}
+
+	args, err := flags.Parse(&cliOpts)
+
+	targetUrl := args[0]
+	dataDir := args[1]
+
+	if err != nil {
+		panic(err)
 	}
 
-	targetUrl := os.Args[1]
-	dataDir := os.Args[2]
+	opts := cold.Options{
+		TargetUrl:     targetUrl,
+		DataDir:       dataDir,
+		IgnoreHeaders: cliOpts.IgnoreHeader,
+	}
 
 	wd, err := os.Getwd()
 
@@ -40,7 +54,7 @@ func main() {
 			panic(err)
 		}
 
-		cresp, err := creq.ToResponse(targetUrl, dataDir)
+		cresp, err := creq.ToResponse(&opts)
 
 		if err != nil {
 			panic(err)

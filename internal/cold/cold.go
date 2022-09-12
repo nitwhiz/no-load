@@ -11,9 +11,16 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strings"
 )
 
 var client = &http.Client{}
+
+type Options struct {
+	TargetUrl     string
+	DataDir       string
+	IgnoreHeaders []string
+}
 
 type Request struct {
 	Method  string            `json:"method"`
@@ -52,7 +59,32 @@ func NewRequest(r *http.Request) (*Request, error) {
 	return &cr, nil
 }
 
-func (r *Request) GetHash() (string, error) {
+func (r *Request) GetHash(opts *Options) (string, error) {
+	rr := Request{
+		Method:  r.Method,
+		URL:     r.URL,
+		Headers: map[string]string{},
+		Body:    r.Body,
+	}
+
+	for k, v := range r.Headers {
+		ignored := false
+
+		for _, h := range opts.IgnoreHeaders {
+			if strings.ToLower(k) == strings.ToLower(h) {
+				fmt.Printf("ignoring header %s\n", k)
+
+				delete(r.Headers, k)
+
+				ignored = true
+			}
+		}
+
+		if !ignored {
+			rr.Headers[k] = v
+		}
+	}
+
 	bs, err := json.Marshal(r)
 
 	if err != nil {
@@ -134,19 +166,19 @@ func fromRequest(r *Request, targetUrl string, fp string) (*Response, error) {
 	return &cresp, nil
 }
 
-func (r *Request) ToResponse(targetUrl string, dataDir string) (*Response, error) {
-	h, err := r.GetHash()
+func (r *Request) ToResponse(opts *Options) (*Response, error) {
+	h, err := r.GetHash(opts)
 
 	if err != nil {
 		return nil, err
 	}
 
-	fp := path.Join(dataDir, h+".json")
+	fp := path.Join(opts.DataDir, h+".json")
 
 	if _, err := os.Stat(fp); err == nil {
 		return fromFile(fp)
 	} else if errors.Is(err, os.ErrNotExist) {
-		return fromRequest(r, targetUrl, fp)
+		return fromRequest(r, opts.TargetUrl, fp)
 	}
 
 	return nil, err
