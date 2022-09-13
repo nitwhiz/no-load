@@ -11,6 +11,7 @@ import (
 
 type CLIOptions struct {
 	IgnoreHeader []string `short:"i" long:"ignore-header" description:"header name to ignore when hashing"`
+	Dry          bool     `short:"d" long:"dry" description:"don't save any files'"`
 }
 
 func main() {
@@ -29,6 +30,7 @@ func main() {
 		TargetUrl:     targetUrl,
 		DataDir:       dataDir,
 		IgnoreHeaders: cliOpts.IgnoreHeader,
+		Dry:           cliOpts.Dry,
 	}
 
 	wd, err := os.Getwd()

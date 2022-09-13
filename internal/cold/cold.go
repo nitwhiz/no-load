@@ -20,6 +20,7 @@ type Options struct {
 	TargetUrl     string
 	DataDir       string
 	IgnoreHeaders []string
+	Dry           bool
 }
 
 type Request struct {
@@ -67,25 +68,33 @@ func (r *Request) GetHash(opts *Options) (string, error) {
 		Body:    r.Body,
 	}
 
-	for k, v := range r.Headers {
-		ignored := false
+	ignoreAllHeaders := false
 
-		for _, h := range opts.IgnoreHeaders {
-			if strings.ToLower(k) == strings.ToLower(h) {
-				fmt.Printf("ignoring header %s\n", k)
-
-				delete(r.Headers, k)
-
-				ignored = true
-			}
-		}
-
-		if !ignored {
-			rr.Headers[k] = v
+	for _, h := range opts.IgnoreHeaders {
+		if h == "*" {
+			ignoreAllHeaders = true
+			fmt.Printf("ignoring all headers\n")
 		}
 	}
 
-	bs, err := json.Marshal(r)
+	if !ignoreAllHeaders {
+		for k, v := range r.Headers {
+			ignored := false
+
+			for _, h := range opts.IgnoreHeaders {
+				if strings.ToLower(k) == strings.ToLower(h) {
+					fmt.Printf("ignoring header %s\n", k)
+					ignored = true
+				}
+			}
+
+			if !ignored {
+				rr.Headers[k] = v
+			}
+		}
+	}
+
+	bs, err := json.Marshal(rr)
 
 	if err != nil {
 		return "", err
@@ -117,10 +126,15 @@ func fromFile(fp string) (*Response, error) {
 	return &cresp, nil
 }
 
-func fromRequest(r *Request, targetUrl string, fp string) (*Response, error) {
+func fromRequest(r *Request, targetUrl string, fp string, dry bool) (*Response, error) {
 	fmt.Printf("serving fresh %s\n", targetUrl+r.URL)
 
 	req, err := http.NewRequest(r.Method, targetUrl+r.URL, bytes.NewReader(r.Body))
+
+	for k, v := range r.Headers {
+		req.Header.Set(k, v)
+		fmt.Printf("HEADER: %s=%s\n", k, v)
+	}
 
 	if err != nil {
 		return nil, err
@@ -151,16 +165,18 @@ func fromRequest(r *Request, targetUrl string, fp string) (*Response, error) {
 		cresp.Headers[k] = v[0]
 	}
 
-	bs, err = json.Marshal(cresp)
+	if !dry {
+		bs, err = json.Marshal(cresp)
 
-	if err != nil {
-		return nil, err
-	}
+		if err != nil {
+			return nil, err
+		}
 
-	err = os.WriteFile(fp, bs, 0666)
+		err = os.WriteFile(fp, bs, 0666)
 
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &cresp, nil
@@ -178,7 +194,7 @@ func (r *Request) ToResponse(opts *Options) (*Response, error) {
 	if _, err := os.Stat(fp); err == nil {
 		return fromFile(fp)
 	} else if errors.Is(err, os.ErrNotExist) {
-		return fromRequest(r, opts.TargetUrl, fp)
+		return fromRequest(r, opts.TargetUrl, fp, opts.Dry)
 	}
 
 	return nil, err
